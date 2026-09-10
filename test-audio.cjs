@@ -23,7 +23,7 @@ for(const kind of ['intro','explosion','laser']) {
   console.log(kind, (a.length/22050).toFixed(2)+'s', 'RMS',rms.toFixed(3));
 }
 let source=fs.readFileSync('public/game-v5.js','utf8');
-source=source.replace(/\}\)\(\);\s*$/, 'window.test={startGame,update,firePlayer,hitPlayer,beginLevel,player,state:()=>({mode,waveClock,shots,lives,count:enemies.length})};})();');
+source=source.replace(/\}\)\(\);\s*$/, 'window.test={startGame,update,firePlayer,hitPlayer,beginLevel,entrancePosition,enemies,playerShots,player,state:()=>({mode,waveClock,shots,lives,count:enemies.length})};})();');
 vm.runInContext(source,context);
 const t=window.test;t.startGame();
 assert.equal(t.state().mode,'intro');t.firePlayer();assert.equal(t.state().shots,0);
@@ -37,3 +37,28 @@ for(let i=0;i<15;i++)t.update(0.1);assert.equal(t.player.dead,0);
 t.beginLevel();assert.equal(t.state().mode,'intro');assert.equal(t.state().count,0);
 assert.equal(buffers,3);
 console.log('PASS: intro blocks gameplay, aliens enter afterwards, laser/death audio triggers, respawn and next intro work.');
+
+for (let path=0;path<4;path++) {
+  const enemy={entrancePath:path,baseX:300,baseY:132};
+  let lowSeconds=0, previous=t.entrancePosition(enemy,0);
+  for(let step=1;step<=480;step++) {
+    const pos=t.entrancePosition(enemy,step/480);
+    assert(Number.isFinite(pos.x) && Number.isFinite(pos.y));
+    assert(Math.hypot(pos.x-previous.x,pos.y-previous.y)<8,'entrance must not teleport');
+    assert(pos.y<580,'low pass must stay above player');
+    if(pos.y>430)lowSeconds+=0.01;
+    previous=pos;
+  }
+  assert(lowSeconds>1.5,'need time to shoot low entrants');
+  assert.equal(previous.x,enemy.baseX);assert.equal(previous.y,enemy.baseY);
+  assert.equal(t.entrancePosition(enemy,0.2).x,t.entrancePosition(enemy,0.3).x,'descent is a straight line');
+  const wingman={...enemy,baseX:500};
+  assert.deepEqual(t.entrancePosition(enemy,0.55),t.entrancePosition(wingman,0.55),'squad must follow one path until climb');
+}
+t.startGame();for(let i=0;i<47;i++)t.update(0.1);
+for(let i=0;i<200;i++)t.update(0.01);
+const target=t.enemies[0];assert.equal(target.state,'entering');assert(target.y>430);
+t.player.x=target.x;t.playerShots.length=0;t.firePlayer();
+for(let i=0;i<35;i++)t.update(0.01);
+assert(t.state().count<40,'real player shot must destroy an alien during its low entrance');
+console.log('PASS: four low trailing paths, continuous turns, exact formation endpoints, and shootable entrants.');

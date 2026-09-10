@@ -16,5 +16,6 @@ npx wrangler deploy
 
 No database, storage bucket, or API keys are required.
 
-The header displays `Build 5`. If that text is missing after deployment, the
-older deployment is still being served.
+Build 7: darker minor-key intro with low bass and a tense ending. Alien squads
+descend in single-file lines, make a low sweeping turn where they can be shot,
+and then climb into formation. The header displays `Build 7`.

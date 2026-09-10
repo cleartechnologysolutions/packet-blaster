@@ -253,7 +253,7 @@
     ];
 
     orderedSlots.forEach((slotInfo, slot) => {
-      const group = Math.floor(slot / 4);
+      const group = Math.floor(slot / 8);
       const type = slotInfo.type;
       enemies.push({
         type,
@@ -265,10 +265,10 @@
           h: type === "command" ? 32 : 27,
           hp: type === "command" ? 2 + Math.floor(wave / 6) : 1,
           state: "entering",
-          enterDelay: group * 0.52 + (slot % 4) * 0.09,
-          enterDuration: 1.72 + (group % 3) * 0.12,
+          enterDelay: group * 1.4 + (slot % 8) * 0.18,
+          enterDuration: 4.8,
           entrancePath: group % 4,
-          entranceSound: slot % 4 === 0,
+          entranceSound: slot % 8 === 0,
           entranceT: 0,
           dive: 0,
           diveStartX: 0,
@@ -472,27 +472,29 @@
     if (enemy.entrancePath === 4) {
       x = bezier(W / 2, W * 0.86, W * 0.12, targetX, p);
       y = bezier(-90, 90, 250, targetY, p);
-    } else if (enemy.entrancePath < 2) {
-      const mirror = enemy.entrancePath === 0 ? 1 : -1;
-      if (p < 0.56) {
-        const q = p / 0.56;
-        x = bezier(mirror > 0 ? -70 : W + 70, mirror > 0 ? W * 0.12 : W * 0.88, mirror > 0 ? W * 0.18 : W * 0.82, W / 2, q);
-        y = bezier(155, 22, 350, 252, q);
-      } else {
-        const q = (p - 0.56) / 0.44;
-        x = bezier(W / 2, mirror > 0 ? W * 0.88 : W * 0.12, targetX + mirror * 95, targetX, q);
-        y = bezier(252, 345, 35, targetY, q);
-      }
     } else {
-      const mirror = enemy.entrancePath === 2 ? 1 : -1;
-      if (p < 0.5) {
-        const q = p / 0.5;
-        x = bezier(mirror > 0 ? W * 0.2 : W * 0.8, mirror > 0 ? W * 0.08 : W * 0.92, mirror > 0 ? W * 0.78 : W * 0.22, W / 2, q);
-        y = bezier(-55, 170, 85, 224, q);
+      // Every alien follows the same line and low turn as its squad leader.
+      // Only the final climb branches off to each alien's formation slot.
+      const right = enemy.entrancePath % 2 === 1;
+      const mirrorX = value => right ? W - value : value;
+      const entryX = enemy.entrancePath < 2 ? W * 0.25 : W * 0.34;
+      const turnY = H * 0.625;
+      const radiusX = 130;
+      const radiusY = H * 0.15;
+      if (p < 0.38) {
+        const q = p / 0.38;
+        x = mirrorX(entryX);
+        y = -60 + q * (turnY + 60);
+      } else if (p < 0.75) {
+        const q = (p - 0.38) / 0.37;
+        const angle = Math.PI * (1 - q);
+        x = mirrorX(entryX + radiusX + radiusX * Math.cos(angle));
+        y = turnY + radiusY * Math.sin(angle);
       } else {
-        const q = (p - 0.5) / 0.5;
-        x = bezier(W / 2, mirror > 0 ? W * 0.83 : W * 0.17, targetX - mirror * 70, targetX, q);
-        y = bezier(224, 306, 40, targetY, q);
+        const q = (p - 0.75) / 0.25;
+        const exitX = mirrorX(entryX + 2 * radiusX);
+        x = bezier(exitX, exitX, targetX, targetX, q);
+        y = bezier(turnY, turnY - 90, targetY + 80, targetY, q);
       }
     }
 
