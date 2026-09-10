@@ -132,6 +132,14 @@ button {
   display: block;
 }
 
+.hud .life-icons {
+  color: #22d3ee;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: clamp(12px, 2vw, 18px);
+  letter-spacing: 2px;
+  white-space: nowrap;
+}
+
 .hud span {
   color: #7dd3fc;
   font-size: 10px;

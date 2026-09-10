@@ -26,16 +26,21 @@
   let score = 0;
   let highScore = Number(localStorage.getItem("packetBlasterHighScore") || 0);
   let wave = 1;
-  let lives = 3;
+  let lives = 5;
+  let nextBonusLife = 20000;
   let shots = 0;
   let hits = 0;
   let formationTime = 0;
+  let waveClock = 0;
+  let formationReady = false;
   let diveClock = 0;
   let enemyShotClock = 0;
   let nextWaveClock = 0;
   let screenShake = 0;
   let soundOn = localStorage.getItem("packetBlasterSound") !== "off";
   let audio = null;
+  let musicTimer = null;
+  let musicStep = 0;
   let lastTime = performance.now();
 
   const keys = new Set();
@@ -74,11 +79,50 @@
     oscillator.stop(audio.currentTime + duration);
   }
 
+  function musicVoice(frequency, when, duration, type, volume) {
+    if (!soundOn || !audio) return;
+    const oscillator = audio.createOscillator();
+    const gain = audio.createGain();
+    const filter = audio.createBiquadFilter();
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(frequency, when);
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(type === "triangle" ? 900 : 1450, when);
+    gain.gain.setValueAtTime(0.0001, when);
+    gain.gain.exponentialRampToValueAtTime(volume, when + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
+    oscillator.connect(filter).connect(gain).connect(audio.destination);
+    oscillator.start(when);
+    oscillator.stop(when + duration + 0.02);
+  }
+
+  function startMusic() {
+    if (!soundOn || musicTimer || mode !== "playing") return;
+    ensureAudio();
+    const bass = [82.41, 82.41, 98, 110, 82.41, 123.47, 110, 98];
+    const lead = [329.63, 493.88, 392, 587.33, 440, 523.25, 392, 493.88,
+      349.23, 523.25, 440, 659.25, 493.88, 587.33, 440, 523.25];
+    musicTimer = window.setInterval(() => {
+      if (!audio || mode !== "playing" || !soundOn) return;
+      const now = audio.currentTime + 0.025;
+      musicVoice(bass[Math.floor(musicStep / 2) % bass.length], now, 0.16, "triangle", 0.022);
+      musicVoice(lead[musicStep % lead.length], now, 0.085, "square", 0.011);
+      if (musicStep % 4 === 2) musicVoice(lead[(musicStep + 5) % lead.length] / 2, now + 0.055, 0.065, "square", 0.007);
+      musicStep++;
+    }, 135);
+  }
+
+  function stopMusic() {
+    if (musicTimer) window.clearInterval(musicTimer);
+    musicTimer = null;
+  }
+
   function updateHud() {
     ui.score.textContent = String(score).padStart(6, "0");
     ui.highScore.textContent = String(highScore).padStart(6, "0");
     ui.wave.textContent = wave;
-    ui.lives.textContent = lives;
+    ui.lives.textContent = lives > 0 ? Array.from({ length: lives }, () => "◆").join(" ") : "NONE";
+    ui.lives.setAttribute("aria-label", lives + (lives === 1 ? " ship" : " ships"));
     ui.accuracy.textContent = "ACCURACY " + (shots ? Math.round(hits / shots * 100) : 0) + "%";
     ui.threatStatus.textContent = "THREATS " + enemies.length;
     if (player.shield > 0) ui.powerStatus.textContent = "SHIELD " + Math.ceil(player.shield) + "s";
@@ -104,15 +148,19 @@
   function spawnWave() {
     enemies.length = 0;
     enemyShots.length = 0;
+    waveClock = 0;
+    formationReady = false;
     const cols = 10;
     const rows = Math.min(6, 4 + Math.floor((wave - 1) / 3));
     const spacingX = 70;
     const spacingY = 54;
     const startX = W / 2 - (cols - 1) * spacingX / 2;
 
+    let slot = 0;
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         const type = row === 0 ? "command" : row < 3 ? "striker" : "scout";
+        const group = Math.floor(slot / 5);
         enemies.push({
           type,
           baseX: startX + col * spacingX,
@@ -122,19 +170,25 @@
           w: type === "command" ? 38 : 31,
           h: type === "command" ? 32 : 27,
           hp: type === "command" ? 2 + Math.floor(wave / 6) : 1,
-          state: "formation",
+          state: "entering",
+          enterDelay: group * 0.46 + (slot % 5) * 0.075,
+          enterDuration: 1.65 + (group % 3) * 0.14,
+          entrancePath: group % 4,
+          entranceSound: slot % 5 === 0,
+          entranceT: 0,
           dive: 0,
           diveStartX: 0,
           phase: col * 0.47 + row * 0.29,
           targetX: W / 2,
         });
+        slot++;
       }
     }
 
     if (wave % 5 === 0) {
-      enemies.push({ type: "boss", baseX: W / 2, baseY: 48, x: W / 2, y: 48, w: 92, h: 46, hp: 18 + wave * 2, maxHp: 18 + wave * 2, state: "formation", dive: 0, phase: 0 });
+      enemies.push({ type: "boss", baseX: W / 2, baseY: 48, x: W / 2, y: -80, w: 92, h: 46, hp: 18 + wave * 2, maxHp: 18 + wave * 2, state: "entering", enterDelay: slot * 0.095 + 0.5, enterDuration: 2.2, entrancePath: 4, entranceT: 0, dive: 0, phase: 0 });
     }
-    showWave(wave % 5 === 0 ? "BOSS WAVE " + wave : "WAVE " + wave);
+    showWave(wave % 5 === 0 ? "BOSS INBOUND // WAVE " + wave : "INCOMING // WAVE " + wave);
     updateHud();
   }
 
@@ -142,7 +196,8 @@
     ensureAudio();
     score = 0;
     wave = 1;
-    lives = 3;
+    lives = 5;
+    nextBonusLife = 20000;
     shots = 0;
     hits = 0;
     formationTime = 0;
@@ -152,12 +207,14 @@
     playerShots.length = 0;
     powerups.length = 0;
     particles.length = 0;
+    musicStep = 0;
     resetPlayer();
     spawnWave();
     mode = "playing";
     ui.gameOverlay.classList.add("hidden");
     ui.pauseButton.textContent = "Pause";
     tone(240, 0.12, "square", 0.045, 280);
+    startMusic();
     updateHud();
   }
 
@@ -169,16 +226,19 @@
       ui.startButton.textContent = "Resume";
       ui.gameOverlay.classList.remove("hidden");
       ui.pauseButton.textContent = "Resume";
+      stopMusic();
     } else if (mode === "paused") {
       mode = "playing";
       ui.gameOverlay.classList.add("hidden");
       ui.pauseButton.textContent = "Pause";
       lastTime = performance.now();
+      startMusic();
     }
   }
 
   function gameOver() {
     mode = "over";
+    stopMusic();
     highScore = Math.max(highScore, score);
     localStorage.setItem("packetBlasterHighScore", highScore);
     ui.overlayTitle.textContent = "Connection Lost";
@@ -230,6 +290,13 @@
     const points = enemy.type === "boss" ? 2500 : enemy.type === "command" ? 180 : enemy.type === "striker" ? 110 : 70;
     score += enemy.state === "diving" ? points * 2 : points;
     highScore = Math.max(highScore, score);
+    if (score >= nextBonusLife) {
+      lives++;
+      nextBonusLife += 50000;
+      showWave("BONUS SHIP");
+      tone(440, 0.12, "square", 0.04, 220);
+      window.setTimeout(() => tone(660, 0.16, "square", 0.04, 220), 115);
+    }
     enemies.splice(index, 1);
     addExplosion(enemy.x, enemy.y, enemy.type === "boss" ? colors.gold : colors.pink, enemy.type === "boss" ? 42 : 14);
     tone(enemy.type === "boss" ? 120 : 180, enemy.type === "boss" ? 0.5 : 0.13, "sawtooth", 0.035, -80);
@@ -260,6 +327,48 @@
     return Math.abs(a.x - b.x) * 2 < a.w + b.w && Math.abs(a.y - b.y) * 2 < a.h + b.h;
   }
 
+  function bezier(a, b, c, d, t) {
+    const u = 1 - t;
+    return u * u * u * a + 3 * u * u * t * b + 3 * u * t * t * c + t * t * t * d;
+  }
+
+  function entrancePosition(enemy, progress) {
+    const p = Math.max(0, Math.min(1, progress));
+    const targetX = enemy.baseX;
+    const targetY = enemy.baseY;
+    let x;
+    let y;
+
+    if (enemy.entrancePath === 4) {
+      x = bezier(W / 2, W * 0.86, W * 0.12, targetX, p);
+      y = bezier(-90, 90, 250, targetY, p);
+    } else if (enemy.entrancePath < 2) {
+      const mirror = enemy.entrancePath === 0 ? 1 : -1;
+      if (p < 0.56) {
+        const q = p / 0.56;
+        x = bezier(mirror > 0 ? -70 : W + 70, mirror > 0 ? W * 0.12 : W * 0.88, mirror > 0 ? W * 0.18 : W * 0.82, W / 2, q);
+        y = bezier(155, 22, 350, 252, q);
+      } else {
+        const q = (p - 0.56) / 0.44;
+        x = bezier(W / 2, mirror > 0 ? W * 0.88 : W * 0.12, targetX + mirror * 95, targetX, q);
+        y = bezier(252, 345, 35, targetY, q);
+      }
+    } else {
+      const mirror = enemy.entrancePath === 2 ? 1 : -1;
+      if (p < 0.5) {
+        const q = p / 0.5;
+        x = bezier(mirror > 0 ? W * 0.2 : W * 0.8, mirror > 0 ? W * 0.08 : W * 0.92, mirror > 0 ? W * 0.78 : W * 0.22, W / 2, q);
+        y = bezier(-55, 170, 85, 224, q);
+      } else {
+        const q = (p - 0.5) / 0.5;
+        x = bezier(W / 2, mirror > 0 ? W * 0.83 : W * 0.17, targetX - mirror * 70, targetX, q);
+        y = bezier(224, 306, 40, targetY, q);
+      }
+    }
+
+    return { x, y };
+  }
+
   function update(dt) {
     stars.forEach((star) => {
       star.y += star.speed * dt;
@@ -276,6 +385,7 @@
 
     if (mode !== "playing") return;
     formationTime += dt;
+    waveClock += dt;
     player.cooldown = Math.max(0, player.cooldown - dt);
     player.invulnerable = Math.max(0, player.invulnerable - dt);
     player.rapid = Math.max(0, player.rapid - dt);
@@ -294,35 +404,74 @@
 
     const formationOffset = Math.sin(formationTime * (0.9 + wave * 0.018)) * Math.min(80, 38 + wave * 2);
     enemies.forEach((enemy) => {
-      if (enemy.type === "boss") {
+      if (enemy.state === "entering") {
+        const progress = (waveClock - enemy.enterDelay) / enemy.enterDuration;
+        if (progress < 0) {
+          enemy.x = -120;
+          enemy.y = -120;
+          return;
+        }
+        const oldX = enemy.x;
+        const oldY = enemy.y;
+        const position = entrancePosition(enemy, progress);
+        enemy.x = position.x;
+        enemy.y = position.y;
+        if (oldX > -100 && oldY > -100) enemy.angle = Math.atan2(enemy.y - oldY, enemy.x - oldX) - Math.PI / 2;
+        enemy.entranceT = Math.max(0, Math.min(1, progress));
+        const soundStage = Math.floor(enemy.entranceT * 5);
+        if (enemy.soundStage !== soundStage && enemy.entranceSound) {
+          enemy.soundStage = soundStage;
+          tone(240 + soundStage * 70, 0.07, "sawtooth", 0.009, 95);
+        }
+        if (progress >= 1) {
+          enemy.state = "formation";
+          enemy.x = enemy.baseX;
+          enemy.y = enemy.baseY;
+          enemy.angle = 0;
+          tone(260 + (enemy.baseY % 120), 0.055, "square", 0.006, 90);
+        }
+      } else if (enemy.type === "boss") {
+        enemy.angle = 0;
         enemy.x = enemy.baseX + Math.sin(formationTime * 0.75) * 210;
         enemy.y = enemy.baseY + Math.sin(formationTime * 1.6) * 10;
       } else if (enemy.state === "formation") {
+        enemy.angle = 0;
         enemy.x = enemy.baseX + formationOffset;
         enemy.y = enemy.baseY + Math.sin(formationTime * 2 + enemy.phase) * 5;
       } else {
+        const oldX = enemy.x;
+        const oldY = enemy.y;
         enemy.dive += dt * (0.28 + wave * 0.006);
         const t = enemy.dive;
         enemy.x = enemy.diveStartX * (1 - t) + enemy.targetX * t + Math.sin(t * Math.PI * 4 + enemy.phase) * 125;
         enemy.y = enemy.baseY + t * (H + 120);
+        enemy.angle = Math.atan2(enemy.y - oldY, enemy.x - oldX) - Math.PI / 2;
         if (t > 1.08) {
           enemy.state = "formation";
           enemy.dive = 0;
           enemy.y = enemy.baseY;
+          enemy.angle = 0;
         }
       }
     });
 
+    if (!formationReady && enemies.length && !enemies.some((enemy) => enemy.state === "entering")) {
+      formationReady = true;
+      showWave("FORMATION LOCKED");
+      tone(330, 0.1, "square", 0.028, 110);
+      window.setTimeout(() => tone(494, 0.14, "square", 0.025, 165), 90);
+    }
+
     diveClock -= dt;
     const activeDivers = enemies.filter((enemy) => enemy.state === "diving").length;
-    if (diveClock <= 0 && activeDivers < Math.min(5, 1 + Math.floor(wave / 2))) {
+    if (formationReady && diveClock <= 0 && activeDivers < Math.min(5, 1 + Math.floor(wave / 2))) {
       const candidates = enemies.filter((enemy) => enemy.state === "formation" && enemy.type !== "boss");
       if (candidates.length) beginDive(candidates[Math.floor(Math.random() * candidates.length)]);
       diveClock = Math.max(0.34, 1.25 - wave * 0.055) + Math.random() * 0.55;
     }
 
     enemyShotClock -= dt;
-    if (enemyShotClock <= 0 && enemies.length) {
+    if (formationReady && enemyShotClock <= 0 && enemies.length) {
       const shooters = enemies.filter((enemy) => enemy.y < H - 110);
       if (shooters.length) fireEnemy(shooters[Math.floor(Math.random() * shooters.length)]);
       enemyShotClock = Math.max(0.22, 0.82 - wave * 0.035) + Math.random() * 0.35;
@@ -420,6 +569,7 @@
   function drawEnemy(enemy) {
     ctx.save();
     ctx.translate(enemy.x, enemy.y);
+    ctx.rotate(enemy.angle || 0);
     const pulse = 0.94 + Math.sin(formationTime * 4 + enemy.phase) * 0.06;
     ctx.scale(pulse, pulse);
 
@@ -594,7 +744,10 @@
     soundOn = !soundOn;
     localStorage.setItem("packetBlasterSound", soundOn ? "on" : "off");
     ui.soundButton.textContent = soundOn ? "Sound" : "Muted";
-    if (soundOn) tone(420, 0.1, "sine", 0.035, 160);
+    if (soundOn) {
+      tone(420, 0.1, "sine", 0.035, 160);
+      startMusic();
+    } else stopMusic();
   });
 
   ui.highScore.textContent = String(highScore).padStart(6, "0");
