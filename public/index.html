@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050914">
+  <title>Packet Blaster | Clear Technology Solutions</title>
+  <meta name="description" content="An original arcade space shooter from Clear Technology Solutions.">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">CTS</div>
+        <div>
+          <strong>Clear Technology Solutions</strong>
+          <span>Packet Blaster</span>
+        </div>
+      </div>
+      <div class="top-actions">
+        <button class="icon-button" id="soundButton" type="button" title="Toggle sound" aria-label="Toggle sound">Sound</button>
+        <button class="icon-button" id="pauseButton" type="button" title="Pause game" aria-label="Pause game">Pause</button>
+      </div>
+    </header>
+
+    <section class="game-stage" aria-label="Packet Blaster arcade game">
+      <div class="hud">
+        <div><span>Score</span><strong id="score">000000</strong></div>
+        <div><span>High score</span><strong id="highScore">000000</strong></div>
+        <div><span>Wave</span><strong id="wave">1</strong></div>
+        <div><span>Lives</span><strong id="lives">3</strong></div>
+      </div>
+
+      <div class="canvas-wrap">
+        <canvas id="gameCanvas" width="960" height="720" aria-label="Packet Blaster game area"></canvas>
+        <div class="game-overlay" id="gameOverlay">
+          <p class="eyebrow">CTS ARCADE // NODE 01</p>
+          <h1 id="overlayTitle">Packet Blaster</h1>
+          <p id="overlayText">Defend the network. Break the formation. Keep the packets moving.</p>
+          <button class="start-button" id="startButton" type="button">Start mission</button>
+        </div>
+        <div class="wave-banner" id="waveBanner" aria-live="polite"></div>
+      </div>
+
+      <div class="mobile-controls" aria-label="Touch controls">
+        <button id="leftButton" type="button" aria-label="Move left">Left</button>
+        <button id="fireButton" class="fire" type="button" aria-label="Fire">Fire</button>
+        <button id="rightButton" type="button" aria-label="Move right">Right</button>
+      </div>
+
+      <div class="statusbar">
+        <span id="powerStatus">SYSTEM READY</span>
+        <span id="accuracy">ACCURACY 0%</span>
+        <span id="threatStatus">THREATS 0</span>
+      </div>
+    </section>
+  </main>
+  <script src="/game.js"></script>
+</body>
+</html>
