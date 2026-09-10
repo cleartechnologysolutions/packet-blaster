@@ -25,7 +25,7 @@
 
   const spritePalette = {
     W: "#f8fafc", S: "#cbd5e1", R: "#fb3b62", B: "#38bdf8",
-    C: "#22d3ee", Y: "#fbbf24", G: "#84cc16", P: "#c084fc",
+    C: "#22d3ee", Y: "#fbbf24", G: "#84cc16", P: "#c084fc", D: "#64748b",
   };
 
   const playerSprite = [
@@ -51,7 +51,52 @@
     ],
   };
 
+  // Hand-drawn, symmetric pixel armor, wing claws and recessed red eyes.
+  const bossSprite = [
+    'Y.................Y',
+    'YY.......S.......YY',
+    'SYY.....SYS.....YYS',
+    'SSYY...SYYYS...YYSS',
+    'YSSYY.SYYYYYS.YYSSY',
+    'YYSSYYYYYYYYYYYYYSSYY',
+    'SYYSSYYYYSSSYYYYSSYYS',
+    'SSYYYSSYYSSSSSYYSSYYYSS',
+    'YSSYYYYSSSSSSSSSSSYYYYSSY',
+    'YYSSYYYSSRRSSSRRSSYYYSSYY',
+    'YYYSSYYYSSR...RSSYYYSSYYY',
+    'YYSSSYYYSSSSWSSSSYYYSSSYY',
+    'YYSS.YYYYSSWWWSSYYYY.SSYY',
+    'YSS..YYYSSWWWWWSSYYY..SSY',
+    'YS...YYSSSSWWWSSSSYY...SY',
+    'Y....YSSS..SSS..SSSY....Y',
+    'S....SSY...R...YSS....S',
+    'S....SY.........YS....S',
+    'Y...............Y',
+  ].map(row => {
+    const padding = Math.floor((31 - row.length) / 2);
+    return '.'.repeat(padding) + row.replace(/S/g, 'D') + '.'.repeat(31 - row.length - padding);
+  });
+
   let mode = "title";
+  const alienVariants = [
+    { name: 'ORIGINAL FLEET', flight: 'classic', weapon: 'single', armor: 0, color: 'B' },
+    { name: 'TWIN GUNNERS', flight: 'classic', weapon: 'twin', armor: 0, color: 'R' },
+    { name: 'ZIGZAG RAIDERS', flight: 'weave', weapon: 'single', armor: 0, color: 'G' },
+    { name: 'SPREAD HUNTERS', flight: 'classic', weapon: 'spread', armor: 0, color: 'P' },
+    { name: 'CORKSCREW ACES', flight: 'spiral', weapon: 'single', armor: 0, color: 'C' },
+    { name: 'ARMORED GUNNERS', flight: 'classic', weapon: 'twin', armor: 1, color: 'Y' },
+  ];
+  function waveProfile(level) {
+    const pair = Math.floor((level - 1) / 2);
+    if (pair < alienVariants.length) return alienVariants[pair];
+    // Later pairs combine learned threats instead of endlessly increasing bullet counts.
+    const mix = pair - alienVariants.length;
+    const flight = ['weave', 'spiral', 'classic'][mix % 3];
+    const weapon = ['twin', 'spread', 'single'][Math.floor(mix / 3) % 3];
+    const armor = Math.floor(mix / 9) % 2;
+    const label = { weave: 'ZIGZAG', spiral: 'CORKSCREW', classic: 'ASSAULT', twin: 'GUNNERS', spread: 'HUNTERS', single: 'RAIDERS' };
+    return { name: (armor ? 'ARMORED ' : '') + label[flight] + ' ' + label[weapon], flight, weapon, armor, color: ['R', 'G', 'P', 'C', 'Y'][mix % 5] };
+  }
   let introRemaining = 0;
   let resumeMode = 'playing';
   let introSource = null;
@@ -85,7 +130,7 @@
     enemies.length = playerShots.length = enemyShots.length = 0;
     touch.fire = false;
     fireHeldSeconds = 0;
-    ui.waveBanner.textContent = 'STAGE ' + wave + ' · GET READY';
+    ui.waveBanner.textContent = 'STAGE ' + wave + ' · ' + waveProfile(wave).name;
     ui.waveBanner.classList.add('visible');
     introSource = playSample('intro');
   }
@@ -234,6 +279,7 @@
   }
 
   function spawnWave() {
+    const variant = waveProfile(wave);
     enemies.length = 0;
     enemyShots.length = 0;
     waveClock = 0;
@@ -260,13 +306,14 @@
       const type = slotInfo.type;
       enemies.push({
         type,
+        variant,
         baseX: slotInfo.baseX,
         baseY: slotInfo.baseY,
         x: -120,
         y: -120,
           w: type === "command" ? 38 : 31,
           h: type === "command" ? 32 : 27,
-          hp: type === "command" ? 2 + Math.floor(wave / 6) : 1,
+          hp: (type === "command" ? 2 + Math.floor(wave / 6) : 1) + variant.armor,
           state: "entering",
           enterDelay: group * 1.4 + (slot % 8) * 0.18,
           enterDuration: 4.8,
@@ -281,7 +328,7 @@
     });
 
     if (wave % 5 === 0) {
-      enemies.push({ type: "boss", baseX: W / 2, baseY: 42, x: W / 2, y: -80, w: 92, h: 46, hp: 18 + wave * 2, maxHp: 18 + wave * 2, state: "entering", enterDelay: orderedSlots.length * 0.13 + 0.5, enterDuration: 2.2, entrancePath: 4, entranceT: 0, dive: 0, phase: 0 });
+      enemies.push({ type: "boss", baseX: W / 2, baseY: 42, x: W / 2, y: -80, w: 80, h: 52, hp: 18 + wave * 2, maxHp: 18 + wave * 2, state: "entering", enterDelay: orderedSlots.length * 0.13 + 0.5, enterDuration: 2.2, entrancePath: 4, entranceT: 0, dive: 0, phase: 0 });
     }
     showWave(wave % 5 === 0 ? "BOSS INBOUND // WAVE " + wave : "INCOMING // WAVE " + wave);
     updateHud();
@@ -358,7 +405,14 @@
       const dy = player.y - enemy.y;
       const length = Math.hypot(dx, dy) || 1;
       const speed = 230 + wave * 9;
-      enemyShots.push({ x: enemy.x, y: enemy.y + 14, vx: dx / length * speed, vy: dy / length * speed, w: 5, h: 12 });
+      const weapon = enemy.variant?.weapon || 'single';
+      const angles = weapon === 'spread' ? [-0.2, 0, 0.2] : weapon === 'twin' ? [0, 0] : [0];
+      angles.forEach((angle, index) => {
+        const offset = weapon === 'twin' ? (index ? 9 : -9) : 0;
+        enemyShots.push({ x: enemy.x + offset, y: enemy.y + 14,
+          vx: (dx * Math.cos(angle) - dy * Math.sin(angle)) / length * speed,
+          vy: (dx * Math.sin(angle) + dy * Math.cos(angle)) / length * speed, w: 5, h: 12 });
+      });
     }
   }
 
@@ -494,6 +548,26 @@
       }
     }
 
+    if (enemy.variant?.flight === 'weave' && p < 0.38) {
+      const q = p / 0.38;
+      x += 55 * Math.sin(q * Math.PI * 6) * Math.sin(q * Math.PI);
+    } else if (enemy.variant?.flight === 'spiral' && p >= 0.38 && p < 0.75) {
+      const q = (p - 0.38) / 0.37;
+      x += 55 * Math.sin(q * Math.PI * 4) * Math.sin(q * Math.PI);
+      y += 16 * Math.sin(q * Math.PI * 4) * Math.sin(q * Math.PI);
+    }
+    return { x, y };
+  }
+
+  function divePosition(enemy, t) {
+    const flight = enemy.variant?.flight || 'classic';
+    let x = enemy.diveStartX * (1 - t) + enemy.targetX * t;
+    let y = enemy.baseY + t * (H + 120);
+    if (flight === 'weave') x += Math.sin(t * Math.PI * 8) * 95;
+    else if (flight === 'spiral') {
+      x += Math.sin(t * Math.PI * 4) * 150;
+      y += (Math.cos(t * Math.PI * 4) - 1) * 65;
+    } else x += Math.sin(t * Math.PI * 4 + enemy.phase) * 125;
     return { x, y };
   }
 
@@ -515,7 +589,7 @@
 
     if (mode === 'intro') {
       introRemaining -= dt;
-      ui.waveBanner.textContent = 'STAGE ' + wave + ' · ' + Math.max(1, Math.ceil(introRemaining));
+      ui.waveBanner.textContent = 'STAGE ' + wave + ' · ' + waveProfile(wave).name + ' · ' + Math.max(1, Math.ceil(introRemaining));
       if (introRemaining <= 0) {
         mode = 'playing';
         ui.waveBanner.classList.remove('visible');
@@ -601,8 +675,9 @@
         const oldY = enemy.y;
         enemy.dive += dt * (0.28 + wave * 0.006);
         const t = enemy.dive;
-        enemy.x = enemy.diveStartX * (1 - t) + enemy.targetX * t + Math.sin(t * Math.PI * 4 + enemy.phase) * 125;
-        enemy.y = enemy.baseY + t * (H + 120);
+        const position = divePosition(enemy, t);
+        enemy.x = position.x;
+        enemy.y = position.y;
         enemy.angle = Math.atan2(enemy.y - oldY, enemy.x - oldX) - Math.PI / 2;
         if (t > 1.08) {
           enemy.state = "formation";
@@ -730,21 +805,46 @@
     ctx.imageSmoothingEnabled = false;
 
     if (enemy.type === "boss") {
-      ctx.fillStyle = "#fbbf24";
-      ctx.fillRect(-40, -14, 80, 8);
-      ctx.fillRect(-32, -22, 16, 8);
-      ctx.fillRect(16, -22, 16, 8);
-      ctx.fillRect(-32, -6, 64, 24);
-      ctx.fillStyle = "#be185d";
-      ctx.fillRect(-24, 2, 48, 9);
-      ctx.fillStyle = "#f8fafc";
-      ctx.fillRect(-5, -15, 10, 27);
+      const damaged = enemy.hp < enemy.maxHp * 0.35;
+      const sprite = damaged ? bossSprite.map(row => row.replace(/Y/g, 'R')) : bossSprite;
+      // Engines sit behind the armor and flicker independently of wing movement.
+      ctx.fillStyle = damaged ? colors.red : colors.cyan;
+      [-18, 0, 18].forEach((x, index) => {
+        const flame = 5 + (Math.sin(formationTime * 28 + index * 2) + 1) * 3;
+        ctx.fillRect(x - 2, 17, 4, flame);
+      });
+      drawPixelSprite(sprite, 2.8);
+      ctx.fillStyle = colors.red;
+      ctx.shadowColor = colors.red;
+      ctx.shadowBlur = 5 + Math.sin(formationTime * 5) * 2;
+      ctx.fillRect(-13, -2, 7, 3);
+      ctx.fillRect(6, -2, 7, 3);
+      ctx.shadowBlur = 0;
       const width = 74 * Math.max(0, enemy.hp / enemy.maxHp);
       ctx.fillStyle = "#1e293b";
       ctx.fillRect(-37, 31, 74, 5);
       ctx.fillStyle = colors.red;
       ctx.fillRect(-37, 31, width, 5);
-    } else drawPixelSprite(enemySprites[enemy.type][flap], 2.45);
+    } else {
+      let sprite = enemySprites[enemy.type][flap];
+      if (enemy.variant && enemy.variant !== alienVariants[0]) {
+        sprite = sprite.map(row => row.replace(/[BP]/g, enemy.variant.color));
+      }
+      drawPixelSprite(sprite, 2.45);
+      if (enemy.variant?.weapon === 'twin') {
+        ctx.fillStyle = colors.white;
+        ctx.fillRect(-11, 7, 4, 9);
+        ctx.fillRect(7, 7, 4, 9);
+      } else if (enemy.variant?.weapon === 'spread') {
+        ctx.fillStyle = colors.red;
+        [-10, 0, 10].forEach(x => ctx.fillRect(x - 2, 9, 4, 6));
+      }
+      if (enemy.variant?.armor && enemy.hp > 1) {
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-12, -7, 24, 13);
+      }
+    }
     ctx.restore();
   }
 

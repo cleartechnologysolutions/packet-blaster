@@ -24,7 +24,7 @@ for(const kind of ['intro','explosion','laser','dive-scout','dive-striker','dive
   console.log(kind, (a.length/22050).toFixed(2)+'s', 'RMS',rms.toFixed(3));
 }
 let source=fs.readFileSync('public/game-v5.js','utf8');
-source=source.replace(/\}\)\(\);\s*$/, 'window.test={startGame,update,firePlayer,hitPlayer,beginLevel,beginDive,entrancePosition,enemies,playerShots,player,state:()=>({mode,waveClock,shots,lives,fireHeldSeconds,count:enemies.length})};})();');
+source=source.replace(/\}\)\(\);\s*$/, 'window.test={startGame,update,firePlayer,fireEnemy,hitPlayer,beginLevel,beginDive,entrancePosition,divePosition,waveProfile,bossSprite,drawEnemy,enemies,enemyShots,playerShots,player,setWave:n=>{wave=n;spawnWave();},state:()=>({mode,waveClock,shots,lives,fireHeldSeconds,count:enemies.length})};})();');
 vm.runInContext(source,context);
 const t=window.test;t.startGame();
 assert.equal(t.state().mode,'intro');t.firePlayer();assert.equal(t.state().shots,0);
@@ -88,3 +88,43 @@ for(const type of ['scout','striker','command']) {
   const e={type,x:300};t.beginDive(e);assert.equal(e.state,'diving');
 }
 console.log('PASS: two-second slowdown, keyboard repeat, release/repress, mouse, combined inputs, rapid fire, and dive sound triggers.');
+
+for (let level=1;level<=48;level+=2) {
+  assert.deepEqual(t.waveProfile(level),t.waveProfile(level+1),'same variant for each pair');
+  if(level>1)assert.notDeepEqual(t.waveProfile(level),t.waveProfile(level-2),'next pair changes');
+  t.setWave(level);
+  const e=t.enemies.find(e=>e.type==='scout');
+  assert.equal(e.hp,1+t.waveProfile(level).armor);
+  e.x=400;e.y=200;
+  t.enemyShots.length=0;t.fireEnemy(e);
+  const count={single:1,twin:2,spread:3}[e.variant.weapon];
+  assert.equal(t.enemyShots.length,count);
+  t.enemyShots.forEach(s=>assert(Number.isFinite(s.vx)&&s.vy>0));
+  if(count===2) {
+    assert.equal(t.enemyShots[0].vx,t.enemyShots[1].vx);
+    assert.equal(t.enemyShots[1].x-t.enemyShots[0].x,18);
+  }
+  if(count===3)assert(new Set(t.enemyShots.map(s=>s.vx)).size===3);
+  let previous=t.entrancePosition(e,0), low=0;
+  for(let i=1;i<=480;i++) {
+    const p=t.entrancePosition(e,i/480);
+    assert(Math.hypot(p.x-previous.x,p.y-previous.y)<12,'variant entrance stays continuous');
+    assert(p.x>0&&p.x<960&&p.y<580,'entrance stays in safe corridor');
+    if(p.y>430)low+=0.01;
+    previous=p;
+  }
+  assert(low>1.5,'preserves low shooting pass');
+  assert.equal(previous.x,e.baseX);assert.equal(previous.y,e.baseY);
+  t.beginDive(e);
+  assert(Number.isFinite(t.divePosition(e,0.5).x));
+  t.drawEnemy(e);
+}
+const diver={diveStartX:400,targetX:420,baseY:132,phase:0};
+const paths=['classic','weave','spiral'].map(flight=>t.divePosition({...diver,variant:{flight}},0.2));
+assert.equal(new Set(paths.map(p=>p.x)).size,3,'flight variants must have different paths');
+t.setWave(5);let boss=t.enemies.find(e=>e.type==='boss');assert(boss);
+t.enemyShots.length=0;t.fireEnemy(boss);assert.equal(t.enemyShots.length,3);
+t.drawEnemy(boss);boss.hp=1;t.drawEnemy(boss);
+t.setWave(6);assert(!t.enemies.some(e=>e.type==='boss'));
+assert(t.bossSprite.every(row=>row.length===31));
+console.log('PASS: paired progression through level 48, real spawn HP/volleys, low entrance paths, distinct dives, boss cadence and drawing.');
