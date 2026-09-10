@@ -130,6 +130,7 @@
     enemies.length = playerShots.length = enemyShots.length = 0;
     touch.fire = false;
     fireHeldSeconds = 0;
+    resetHeat();
     ui.waveBanner.textContent = 'STAGE ' + wave + ' · ' + waveProfile(wave).name;
     ui.waveBanner.classList.add('visible');
     introSource = playSample('intro-' + ((wave - 1) % 6));
@@ -156,6 +157,33 @@
   let fireHeldSeconds = 0;
   const touch = { left: false, right: false, fire: false, dragging: false, pointerId: null, startX: 0, playerStartX: 0, moved: false };
   const player = { x: W / 2, y: H - 72, w: 42, h: 34, speed: 430, cooldown: 0, invulnerable: 0, rapid: 0, shield: 0, dead: 0 };
+  const HEAT_LIMIT = 8;
+  function resetHeat() {
+    player.heat = 0;
+    player.heatWarning = false;
+    player.heatPhase = 0;
+    player.tapHeatWindow = 0;
+  }
+  resetHeat();
+
+  function heatBlinkRate() {
+    return 0.75 + Math.max(0, Math.min(1, (player.heat - 3) / 5)) * 1.75;
+  }
+
+  function updateHeat(dt, holdingFire) {
+    if (player.dead > 0) return;
+    if (holdingFire) player.heat += dt;
+    else {
+      const coolingTime = Math.max(0, dt - player.tapHeatWindow);
+      player.heat = Math.max(0, player.heat - coolingTime * 3);
+    }
+    player.tapHeatWindow = Math.max(0, player.tapHeatWindow - dt);
+    if (player.heat >= 3) player.heatWarning = true;
+    if (player.heat === 0) player.heatWarning = false;
+    if (player.heatWarning) player.heatPhase = (player.heatPhase + dt * heatBlinkRate()) % 1;
+    else player.heatPhase = 0;
+    if (player.heat >= HEAT_LIMIT) explodePlayer();
+  }
   const enemies = [];
   const playerShots = [];
   const enemyShots = [];
@@ -269,6 +297,7 @@
 
   function resetPlayer() {
     fireHeldSeconds = 0;
+    resetHeat();
     player.x = W / 2;
     player.y = H - 72;
     player.cooldown = 0;
@@ -400,6 +429,12 @@
     player.cooldown = (player.rapid > 0 ? 0.085 : 0.2) * (fireHeldSeconds >= 2 ? 2 : 1);
     shots++;
     laserShot();
+    // Repeated mobile taps also build heat; holding uses elapsed time instead.
+    if (!keys.has('Space') && !touch.fire) {
+      player.heat += 0.2;
+      player.tapHeatWindow = 0.22;
+      updateHeat(0, false);
+    }
   }
 
   function enemySound(event, enemy) {
@@ -507,9 +542,17 @@
       tone(420, 0.18, "sine", 0.035, -180);
       return;
     }
+    explodePlayer();
+  }
+
+  function explodePlayer() {
+    if (player.dead > 0) return;
     lives--;
     player.dead = 1.35;
     player.invulnerable = 0;
+    player.shield = 0;
+    fireHeldSeconds = 0;
+    resetHeat();
     playerShots.length = 0;
     addShipExplosion(player.x, player.y);
     stopMusic();
@@ -638,6 +681,7 @@
     const direction = ((keys.has("ArrowLeft") || keys.has("KeyA") || touch.left) ? -1 : 0) + ((keys.has("ArrowRight") || keys.has("KeyD") || touch.right) ? 1 : 0);
     if (player.dead <= 0) player.x = Math.max(34, Math.min(W - 34, player.x + direction * player.speed * dt));
     const holdingFire = keys.has("Space") || touch.fire;
+    updateHeat(dt, holdingFire);
     fireHeldSeconds = holdingFire && player.dead <= 0 ? fireHeldSeconds + dt : 0;
     if (holdingFire) firePlayer();
 
@@ -803,7 +847,8 @@
       ctx.globalAlpha = 1;
     }
     ctx.imageSmoothingEnabled = false;
-    drawPixelSprite(playerSprite, 2.75);
+    const redWarning = player.heatWarning && player.heatPhase < 0.5;
+    drawPixelSprite(redWarning ? playerSprite.map(row => row.replace(/[WSB]/g, 'R')) : playerSprite, 2.75);
     ctx.fillStyle = Math.random() > 0.35 ? "#fbbf24" : "#fb7185";
     ctx.fillRect(-2.75, 18, 5.5, 5 + Math.random() * 5);
     ctx.restore();

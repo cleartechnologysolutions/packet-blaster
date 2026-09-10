@@ -28,7 +28,7 @@ for(const kind of ['intro','explosion','laser','dive-scout','dive-striker','dive
   console.log(kind, (a.length/22050).toFixed(2)+'s', 'RMS',rms.toFixed(3));
 }
 let source=fs.readFileSync('public/game-v5.js','utf8');
-source=source.replace(/\}\)\(\);\s*$/, 'window.test={startGame,update,firePlayer,fireEnemy,hitPlayer,beginLevel,beginDive,entrancePosition,divePosition,waveProfile,bossSprite,drawEnemy,enemies,enemyShots,playerShots,player,setWave:n=>{wave=n;spawnWave();},state:()=>({mode,waveClock,shots,lives,fireHeldSeconds,count:enemies.length})};})();');
+source=source.replace(/\}\)\(\);\s*$/, 'window.test={startGame,update,firePlayer,fireEnemy,hitPlayer,beginLevel,beginDive,entrancePosition,divePosition,waveProfile,bossSprite,drawEnemy,drawPlayer,heatBlinkRate,enemies,enemyShots,playerShots,player,setWave:n=>{wave=n;spawnWave();},state:()=>({mode,waveClock,shots,lives,fireHeldSeconds,count:enemies.length})};})();');
 vm.runInContext(source,context);
 const t=window.test;t.startGame();
 assert.equal(t.state().mode,'intro');t.firePlayer();assert.equal(t.state().shots,0);
@@ -249,3 +249,42 @@ t.enemies.splice(0,t.enemies.length,oldScout);oldScout.state='formation';
 shootAt(oldScout);assert(!t.enemies.includes(oldScout),'old scout still takes one shot');
 t.setWave(5);assert.equal(t.enemies.find(e=>e.type==='boss').hp,28);
 console.log('PASS: actual two-hit collisions, persistent drawn damage colors for every role, older scout durability, and unchanged boss HP.');
+
+t.startGame();step(4.7);t.player.invulnerable=100;
+key('keydown');step(2.9);assert(!t.player.heatWarning);
+step(0.2);assert(t.player.heatWarning);
+const slowBlink=t.heatBlinkRate();
+handlers.keydown({code:'KeyP',preventDefault(){}});
+const pausedHeat=t.player.heat;step(1);assert.equal(t.player.heat,pausedHeat);
+handlers.keydown({code:'KeyP',preventDefault(){}});
+step(3);assert(t.heatBlinkRate()>slowBlink);
+key('keyup');step(0.1);assert(t.player.heat>5,'quick release retains heat');
+assert(t.player.heatWarning);
+step(2.2);assert.equal(t.player.heat,0);assert(!t.player.heatWarning);
+
+// Test the actual rendered ship body in each blink phase and when cooled.
+function playerColors() {
+  const colors=new Set();canvasContext.fillRect=()=>colors.add(canvasContext.fillStyle);
+  t.drawPlayer();delete canvasContext.fillRect;return colors;
+}
+t.player.invulnerable=0;assert(playerColors().has('#f8fafc'));
+t.player.heatWarning=true;t.player.heatPhase=0.1;
+assert(!playerColors().has('#f8fafc'));assert(playerColors().has('#fb3b62'));
+t.player.heatPhase=0.6;assert(playerColors().has('#f8fafc'));
+t.beginLevel();assert.equal(t.player.heat,0);assert(!t.player.heatWarning);
+step(4.7);t.player.invulnerable=100;t.player.shield=100;
+const livesBefore=t.state().lives;
+key('keydown');step(7.9);assert.equal(t.state().lives,livesBefore);
+step(0.2);assert.equal(t.state().lives,livesBefore-1);assert(t.player.dead>0);
+assert(playedKinds.includes('explosion'));assert.equal(t.player.heat,0);
+key('keyup');step(1.4);assert.equal(t.player.dead,0);assert.equal(t.player.heat,0);
+
+// Touch taps generate heat too, without requiring a held mouse/Space trigger.
+t.startGame();step(4.7);t.player.invulnerable=100;
+for(let i=0;i<42&&t.player.dead===0;i++) {
+  const event={pointerType:'touch',pointerId:7,clientX:400,preventDefault(){}};
+  handlers['gameCanvas:pointerdown'](event);handlers['gameCanvas:pointerup'](event);
+  step(0.21);
+}
+assert.equal(t.state().lives,4);assert(t.player.dead>0);
+console.log('PASS: slow/fast red blinking, cooldown, pause, heat explosion through shields, respawn reset, and sustained mobile taps.');

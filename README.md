@@ -57,4 +57,10 @@ Build 12: the current alien group in every mixed fleet takes exactly two hits.
 The first hit permanently changes its body and wings to silver-gray; the second
 destroys it. This replaces, rather than adds to, its normal HP/armor. Older
 aliens retain their existing durability; levels 1–2 and boss HP are unchanged.
-The header displays `Build 12`.
+Build 13: sustained fire builds heat. At 3 seconds the ship starts blinking red;
+the blinking accelerates as heat approaches 8 seconds, when the ship explodes
+and loses a life. Releasing fire cools at three times the heating rate, taking
+under 3 seconds from almost full heat. The warning persists until fully cool.
+Repeated mobile taps also generate heat. Shields do not prevent overheating.
+New ships and level intros reset heat; pausing freezes it. The two-second fire
+slowdown still applies. The header displays `Build 13`.
