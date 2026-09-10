@@ -279,7 +279,8 @@
   }
 
   function spawnWave() {
-    const variant = waveProfile(wave);
+    const currentVariant = waveProfile(wave);
+    const previousVariant = waveProfile(Math.max(1, wave - 2));
     enemies.length = 0;
     enemyShots.length = 0;
     waveClock = 0;
@@ -303,6 +304,9 @@
 
     orderedSlots.forEach((slotInfo, slot) => {
       const group = Math.floor(slot / 8);
+      // Keep complete eight-alien squads together so followers share a flight path.
+      const previousSquad = wave > 2 && (group === 3 || (wave % 2 === 1 && group === 1));
+      const variant = previousSquad ? previousVariant : currentVariant;
       const type = slotInfo.type;
       enemies.push({
         type,
@@ -402,16 +406,19 @@
       [-0.24, 0, 0.24].forEach((angle) => enemyShots.push({ x: enemy.x, y: enemy.y + 25, vx: Math.sin(angle) * 220, vy: Math.cos(angle) * 260, w: 6, h: 14 }));
     } else {
       const dx = player.x - enemy.x;
-      const dy = player.y - enemy.y;
-      const length = Math.hypot(dx, dy) || 1;
+      const dy = player.y - (enemy.y + 14);
       const speed = 230 + wave * 9;
       const weapon = enemy.variant?.weapon || 'single';
       const angles = weapon === 'spread' ? [-0.2, 0, 0.2] : weapon === 'twin' ? [0, 0] : [0];
+      // Angle is measured from straight down. Reserve room for the entire fan:
+      // even its outer rays retain at least half their speed vertically downward.
+      const aimLimit = Math.PI / 3 - (weapon === 'spread' ? 0.2 : 0);
+      const aim = Math.max(-aimLimit, Math.min(aimLimit, Math.atan2(dx, Math.max(1, dy))));
       angles.forEach((angle, index) => {
         const offset = weapon === 'twin' ? (index ? 9 : -9) : 0;
         enemyShots.push({ x: enemy.x + offset, y: enemy.y + 14,
-          vx: (dx * Math.cos(angle) - dy * Math.sin(angle)) / length * speed,
-          vy: (dx * Math.sin(angle) + dy * Math.cos(angle)) / length * speed, w: 5, h: 12 });
+          vx: Math.sin(aim + angle) * speed,
+          vy: Math.cos(aim + angle) * speed, w: 5, h: 12 });
       });
     }
   }

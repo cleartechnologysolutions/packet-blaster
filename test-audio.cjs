@@ -64,7 +64,8 @@ for(let i=0;i<35;i++)t.update(0.01);
 assert(t.state().count<40,'real player shot must destroy an alien during its low entrance');
 console.log('PASS: four low trailing paths, continuous turns, exact formation endpoints, and shootable entrants.');
 
-const step = seconds => { for(let i=0;i<Math.round(seconds*100);i++)t.update(0.01); };
+// Isolate fire timing from random powerups dropped by incidental alien kills.
+const step = seconds => { for(let i=0;i<Math.round(seconds*100);i++){t.playerShots.length=0;t.update(0.01);} };
 const key = type => handlers[type]({code:'Space',preventDefault(){}});
 t.startGame();step(4.7);t.player.invulnerable=100;
 key('keydown');step(1.9);
@@ -128,3 +129,38 @@ t.drawEnemy(boss);boss.hp=1;t.drawEnemy(boss);
 t.setWave(6);assert(!t.enemies.some(e=>e.type==='boss'));
 assert(t.bossSprite.every(row=>row.length===31));
 console.log('PASS: paired progression through level 48, real spawn HP/volleys, low entrance paths, distinct dives, boss cadence and drawing.');
+
+for(let level=1;level<=24;level++) {
+  t.setWave(level);
+  const fleet=t.enemies.filter(e=>e.type!=='boss');
+  const current=t.waveProfile(level), previous=t.waveProfile(Math.max(1,level-2));
+  assert.equal(fleet.length,40);
+  const currentCount=fleet.filter(e=>e.variant.name===current.name).length;
+  assert.equal(currentCount,level<=2?40:level%2?24:32);
+  assert(fleet.every(e=>e.variant.name===current.name||e.variant.name===previous.name),'only one previous group');
+  for(let i=0;i<40;i+=8)assert(fleet.slice(i,i+8).every(e=>e.variant.name===fleet[i].variant.name),'whole squads share variant');
+  fleet.forEach(e=>{
+    assert.equal(e.hp,(e.type==='command'?2+Math.floor(level/6):1)+e.variant.armor);
+    t.enemyShots.length=0;t.fireEnemy(e);
+    assert.equal(t.enemyShots.length,{single:1,twin:2,spread:3}[e.variant.weapon]);
+  });
+}
+t.setWave(3);t.player.x=480;t.player.y=648;
+for(const weapon of ['single','twin','spread']) {
+  for(const x of [0,480,960])for(const y of [100,630,648,710]) {
+    t.enemyShots.length=0;
+    t.fireEnemy({type:'scout',x,y,variant:{weapon}});
+    for(const s of t.enemyShots) {
+      const speed=Math.hypot(s.vx,s.vy);
+      assert(s.vy>=speed*0.5-1e-9,'even shots at/below player height must fall decisively');
+      if(x!==480)assert(Math.sign(s.vx)===Math.sign(480-x),'still aims sideways toward player');
+    }
+  }
+}
+// Exercise actual movement on a spread shot near the player's height.
+t.enemyShots.length=0;t.enemies.length=0;t.player.invulnerable=100;
+t.fireEnemy({type:'scout',x:0,y:630,variant:{weapon:'spread'}});
+const positions=t.enemyShots.map(s=>({x:s.x,y:s.y}));t.update(0.1);
+assert.equal(t.enemyShots.length,3);
+t.enemyShots.forEach((s,i)=>{assert(s.y>positions[i].y+12);assert(s.x>positions[i].x);});
+console.log('PASS: 24/16 and 32/8 mixed fleets, inherited weapons/armor, and downward laser trajectories at screen edges and bottom.');

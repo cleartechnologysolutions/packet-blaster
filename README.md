@@ -38,4 +38,12 @@ Build 9: alien abilities change every two levels:
 Every pair keeps its variant while the existing per-level difficulty scaling
 continues. Low, shootable entrances and the boss every fifth level remain.
 Bosses have a new detailed pixel warship sprite, glowing eyes, animated engines,
-and red damaged armor below 35% health. The header displays `Build 9`.
+and red damaged armor below 35% health.
+
+Build 10: mixed fleets retain the previous alien group. Levels 1–2 stay original.
+Odd levels from 3 onward have 24 current and 16 previous aliens; the following
+even level has 32 current and 8 previous aliens. Only the immediately previous
+group carries forward, in complete squads. Bosses remain additional enemies.
+Enemy laser aiming is limited to 60 degrees from straight down, including outer
+spread shots, so all shots fall with at least half their speed directed downward.
+The header displays `Build 10`.
