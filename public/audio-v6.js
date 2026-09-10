@@ -2,7 +2,8 @@
 (() => {
   const rate = 22050;
   function render(kind) {
-    const duration = kind === 'intro' ? 4.4 : kind === 'explosion' ? 1.65 : 0.24;
+    const diving = kind.startsWith('dive-');
+    const duration = kind === 'intro' ? 4.4 : kind === 'explosion' ? 1.65 : diving ? 1.15 : 0.24;
     const samples = new Float32Array(Math.ceil(duration * rate));
     let seed = 73, low = 0, phase = 0;
     // Low E-minor motif, flattened-second tension, and an unresolved ending.
@@ -30,6 +31,15 @@
         if (t > 3.84) {
           v = [35,47,53,58].reduce((sum,n)=>sum+0.12*Math.sin(2*Math.PI*440*2**((n-69)/12)*t),0)*Math.exp(-(t-3.84)*4);
         }
+      } else if (diving) {
+        // Falling alien engine: bending pitch, metallic growl and fluttering air.
+        const weight = kind === 'dive-command' ? 0.72 : kind === 'dive-striker' ? 0.9 : 1.12;
+        const frequency = weight * (85 + 1150*Math.exp(-t*3.8));
+        phase += 2*Math.PI*frequency*(1+0.065*Math.sin(2*Math.PI*19*t))/rate;
+        const flutter = 0.78 + 0.22*Math.sin(2*Math.PI*(12*t+9*t*t));
+        const envelope = Math.min(1,t/0.035)*Math.exp(-t*1.9);
+        v = envelope*flutter*(0.25*Math.sin(phase+1.8*Math.sin(phase*2))
+          + 0.17*Math.sin(phase*0.5) + 0.09*low);
       } else if (kind === 'explosion') {
         // Broadband crack, gritty midrange debris, and falling bass pressure.
         phase += 2*Math.PI*(32+110*Math.exp(-t*13))/rate;

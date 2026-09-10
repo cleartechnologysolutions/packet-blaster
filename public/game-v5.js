@@ -84,6 +84,7 @@
     introRemaining = 4.6;
     enemies.length = playerShots.length = enemyShots.length = 0;
     touch.fire = false;
+    fireHeldSeconds = 0;
     ui.waveBanner.textContent = 'STAGE ' + wave + ' · GET READY';
     ui.waveBanner.classList.add('visible');
     introSource = playSample('intro');
@@ -107,6 +108,7 @@
   let lastTime = performance.now();
 
   const keys = new Set();
+  let fireHeldSeconds = 0;
   const touch = { left: false, right: false, fire: false, dragging: false, pointerId: null, startX: 0, playerStartX: 0, moved: false };
   const player = { x: W / 2, y: H - 72, w: 42, h: 34, speed: 430, cooldown: 0, invulnerable: 0, rapid: 0, shield: 0, dead: 0 };
   const enemies = [];
@@ -221,6 +223,7 @@
   }
 
   function resetPlayer() {
+    fireHeldSeconds = 0;
     player.x = W / 2;
     player.y = H - 72;
     player.cooldown = 0;
@@ -341,7 +344,7 @@
   function firePlayer() {
     if (mode !== 'playing' || player.cooldown > 0 || player.dead > 0) return;
     playerShots.push({ x: player.x, y: player.y - 24, vy: -720, w: 4, h: 18 });
-    player.cooldown = player.rapid > 0 ? 0.085 : 0.2;
+    player.cooldown = (player.rapid > 0 ? 0.085 : 0.2) * (fireHeldSeconds >= 2 ? 2 : 1);
     shots++;
     laserShot();
   }
@@ -364,14 +367,7 @@
     enemy.dive = 0;
     enemy.diveStartX = enemy.x;
     enemy.targetX = player.x + (Math.random() - 0.5) * 180;
-    if (enemy.type === "command") {
-      sweep(880, 120, 0.72, "square", 0.024);
-      window.setTimeout(() => tone(210, 0.16, "sawtooth", 0.018, -90), 180);
-    } else if (enemy.type === "striker") {
-      sweep(690, 95, 0.62, "sawtooth", 0.022);
-    } else {
-      sweep(510, 78, 0.5, "triangle", 0.026);
-    }
+    playSample('dive-' + enemy.type);
   }
 
   function addExplosion(x, y, color, count = 12) {
@@ -553,7 +549,9 @@
 
     const direction = ((keys.has("ArrowLeft") || keys.has("KeyA") || touch.left) ? -1 : 0) + ((keys.has("ArrowRight") || keys.has("KeyD") || touch.right) ? 1 : 0);
     if (player.dead <= 0) player.x = Math.max(34, Math.min(W - 34, player.x + direction * player.speed * dt));
-    if (keys.has("Space") || touch.fire) firePlayer();
+    const holdingFire = keys.has("Space") || touch.fire;
+    fireHeldSeconds = holdingFire && player.dead <= 0 ? fireHeldSeconds + dt : 0;
+    if (holdingFire) firePlayer();
 
     for (let i = playerShots.length - 1; i >= 0; i--) {
       const shot = playerShots[i];
@@ -581,7 +579,7 @@
         const soundStage = Math.floor(enemy.entranceT * 5);
         if (enemy.soundStage !== soundStage && enemy.entranceSound) {
           enemy.soundStage = soundStage;
-          tone(240 + soundStage * 70, 0.07, "sawtooth", 0.009, 95);
+          if (soundStage === 0) playSample('dive-' + enemy.type);
         }
         if (progress >= 1) {
           enemy.state = "formation";
@@ -854,8 +852,14 @@
     if (event.code === "KeyP") togglePause();
     if (event.code === "Enter" && (mode === "title" || mode === "over")) startGame();
   });
-  window.addEventListener("keyup", (event) => keys.delete(event.code));
-  window.addEventListener("blur", () => { keys.clear(); touch.left = touch.right = touch.fire = touch.dragging = false; touch.pointerId = null; if (mode === "playing") togglePause(); });
+  function resetReleasedFire() {
+    if (!keys.has("Space") && !touch.fire) {
+      fireHeldSeconds = 0;
+      player.cooldown = Math.min(player.cooldown, player.rapid > 0 ? 0.085 : 0.2);
+    }
+  }
+  window.addEventListener("keyup", (event) => { keys.delete(event.code); resetReleasedFire(); });
+  window.addEventListener("blur", () => { keys.clear(); touch.left = touch.right = touch.fire = touch.dragging = false; touch.pointerId = null; resetReleasedFire(); if (mode === "playing") togglePause(); });
 
   canvas.addEventListener("pointermove", (event) => {
     if (event.pointerType === "mouse" && mode === "playing") {
@@ -894,12 +898,13 @@
     }
   });
   canvas.addEventListener("pointercancel", (event) => {
+    if (event.pointerType === "mouse") { touch.fire = false; resetReleasedFire(); }
     if (event.pointerId === touch.pointerId) {
       touch.dragging = false;
       touch.pointerId = null;
     }
   });
-  window.addEventListener("pointerup", (event) => { if (event.pointerType === "mouse") touch.fire = false; });
+  window.addEventListener("pointerup", (event) => { if (event.pointerType === "mouse") { touch.fire = false; resetReleasedFire(); } });
 
   ui.startButton.addEventListener("click", () => mode === "paused" ? togglePause() : startGame());
   ui.pauseButton.addEventListener("click", togglePause);
