@@ -99,7 +99,7 @@ for (let level=1;level<=48;level+=2) {
   if(level>1)assert.notDeepEqual(t.waveProfile(level),t.waveProfile(level-2),'next pair changes');
   t.setWave(level);
   const e=t.enemies.find(e=>e.type==='scout');
-  assert.equal(e.hp,1+t.waveProfile(level).armor);
+  assert.equal(e.hp,level>2?2:1);
   e.x=400;e.y=200;
   t.enemyShots.length=0;t.fireEnemy(e);
   const count={single:1,twin:2,spread:3}[e.variant.weapon];
@@ -144,7 +144,9 @@ for(let level=1;level<=24;level++) {
   assert(fleet.every(e=>e.variant.name===current.name||e.variant.name===previous.name),'only one previous group');
   for(let i=0;i<40;i+=8)assert(fleet.slice(i,i+8).every(e=>e.variant.name===fleet[i].variant.name),'whole squads share variant');
   fleet.forEach(e=>{
-    assert.equal(e.hp,(e.type==='command'?2+Math.floor(level/6):1)+e.variant.armor);
+    const currentAlien=level>2&&e.variant.name===current.name;
+    assert.equal(e.twoHitAlien,currentAlien);
+    assert.equal(e.hp,currentAlien?2:(e.type==='command'?2+Math.floor(level/6):1)+e.variant.armor);
     t.enemyShots.length=0;t.fireEnemy(e);
     assert.equal(t.enemyShots.length,{single:1,twin:2,spread:3}[e.variant.weapon]);
   });
@@ -213,3 +215,37 @@ for(let level=1;level<=7;level++) {
 }
 assert.equal(introHashes.size,6,'six distinct dark intros rotate');
 console.log('PASS: six level intro variations, correct rotation, consistent duration and pre-level gameplay delay.');
+
+t.startGame();step(4.7);
+function shootAt(target) {
+  t.update(0);
+  t.playerShots.push({x:target.x,y:target.y,vy:-720,w:4,h:18});
+  t.update(0);
+}
+function spriteColors(target) {
+  const colors=new Set();
+  canvasContext.fillRect=()=>colors.add(canvasContext.fillStyle);
+  t.drawEnemy(target);delete canvasContext.fillRect;
+  return [...colors].sort();
+}
+for(const level of [3,4,5,11,19,30])for(const role of ['scout','striker','command']) {
+  t.setWave(level);
+  const target=t.enemies.find(e=>e.type===role&&e.twoHitAlien);
+  t.enemies.splice(0,t.enemies.length,target);target.state='formation';
+  t.playerShots.length=0;
+  const initialColors=spriteColors(target);
+  shootAt(target);
+  assert.equal(target.hp,1);assert(t.enemies.includes(target));
+  const damageColors=spriteColors(target);
+  assert.notDeepEqual(damageColors,initialColors,'first hit visibly changes palette');
+  assert(damageColors.includes('#cbd5e1'),'damage uses silver-gray');
+  t.beginDive(target);t.update(0.01);
+  assert.equal(target.hp,1);assert.deepEqual(spriteColors(target),damageColors,'damage color persists during flight');
+  shootAt(target);assert(!t.enemies.includes(target),'second real shot destroys alien');
+}
+t.setWave(3);
+const oldScout=t.enemies.find(e=>e.type==='scout'&&!e.twoHitAlien);
+t.enemies.splice(0,t.enemies.length,oldScout);oldScout.state='formation';
+shootAt(oldScout);assert(!t.enemies.includes(oldScout),'old scout still takes one shot');
+t.setWave(5);assert.equal(t.enemies.find(e=>e.type==='boss').hp,28);
+console.log('PASS: actual two-hit collisions, persistent drawn damage colors for every role, older scout durability, and unchanged boss HP.');

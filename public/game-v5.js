@@ -308,16 +308,18 @@
       const previousSquad = wave > 2 && (group === 3 || (wave % 2 === 1 && group === 1));
       const variant = previousSquad ? previousVariant : currentVariant;
       const type = slotInfo.type;
+      const twoHitAlien = wave > 2 && !previousSquad;
       enemies.push({
         type,
         variant,
+        twoHitAlien,
         baseX: slotInfo.baseX,
         baseY: slotInfo.baseY,
         x: -120,
         y: -120,
           w: type === "command" ? 38 : 31,
           h: type === "command" ? 32 : 27,
-          hp: (type === "command" ? 2 + Math.floor(wave / 6) : 1) + variant.armor,
+          hp: twoHitAlien ? 2 : (type === "command" ? 2 + Math.floor(wave / 6) : 1) + variant.armor,
           state: "entering",
           enterDelay: group * 1.4 + (slot % 8) * 0.18,
           enterDuration: 4.8,
@@ -841,6 +843,10 @@
       let sprite = enemySprites[enemy.type][flap];
       if (enemy.variant && enemy.variant !== alienVariants[0]) {
         sprite = sprite.map(row => row.replace(/[BP]/g, enemy.variant.color));
+      }
+      if (enemy.twoHitAlien && enemy.hp === 1) {
+        // Persistent damage color, including wings, survives dives and formation changes.
+        sprite = sprite.map(row => row.replace(/[BPRYGC]/g, 'S'));
       }
       drawPixelSprite(sprite, 2.45);
       if (enemy.variant?.weapon === 'twin') {

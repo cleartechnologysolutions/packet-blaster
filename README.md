@@ -53,4 +53,8 @@ Entrance and dive effects share these signatures; enemy weapon sounds stay
 quieter than dive effects. Player lasers and explosions are unchanged.
 Six dark intro variations rotate each level, changing the motif and key while
 preserving the 4.4-second musical duration and pre-level gameplay delay.
-The header displays `Build 11`.
+Build 12: the current alien group in every mixed fleet takes exactly two hits.
+The first hit permanently changes its body and wings to silver-gray; the second
+destroys it. This replaces, rather than adds to, its normal HP/armor. Older
+aliens retain their existing durability; levels 1–2 and boss HP are unchanged.
+The header displays `Build 12`.
