@@ -5,10 +5,12 @@ const canvasContext = new Proxy({}, { get: (o,k) => o[k] || (()=>{}), set: (o,k,
 const node = id => nodes[id] ||= { textContent:'', classList:{add(){},remove(){}}, setAttribute(){}, addEventListener(type,fn){handlers[id+':'+type]=fn;}, width:960,height:720,getContext:()=>canvasContext };
 const param = () => ({value:0,setValueAtTime(){},exponentialRampToValueAtTime(){}});
 let buffers = 0;
+let renderedKind;
+const playedKinds = [];
 class AudioContext {
   constructor(){this.state='running';this.currentTime=0;this.destination={};}
-  createBuffer(ch,n,r){buffers++;return {copyToChannel(data){assert.equal(data.length,n);}};}
-  createBufferSource(){return {connect(){return this;}, start(){},stop(){}};}
+  createBuffer(ch,n,r){buffers++;return {kind:renderedKind,copyToChannel(data){assert.equal(data.length,n);}};}
+  createBufferSource(){return {connect(){return this;}, start(){playedKinds.push(this.buffer.kind);},stop(){}};}
   createGain(){return {gain:param(),connect(){return this;}};}
   createOscillator(){return {frequency:param(),connect(){return this;},start(){},stop(){}};}
   createBiquadFilter(){return {frequency:param(),connect(){return this;}};}
@@ -16,6 +18,8 @@ class AudioContext {
 const window = {AudioContext,matchMedia:()=>({matches:false}),addEventListener(type,fn){handlers[type]=fn;},setTimeout(){}};
 const context = vm.createContext({window,document:{getElementById:node},localStorage:{getItem(){},setItem(){}},performance:{now:()=>0},requestAnimationFrame(){},console,Float32Array});
 vm.runInContext(fs.readFileSync('public/audio-v6.js','utf8'),context);
+const renderSound = window.ArcadeAudio.render;
+window.ArcadeAudio.render = kind => {renderedKind=kind;return renderSound(kind);};
 for(const kind of ['intro','explosion','laser','dive-scout','dive-striker','dive-command']) {
   const a=window.ArcadeAudio.render(kind);
   assert(a.every(Number.isFinite));
@@ -164,3 +168,48 @@ const positions=t.enemyShots.map(s=>({x:s.x,y:s.y}));t.update(0.1);
 assert.equal(t.enemyShots.length,3);
 t.enemyShots.forEach((s,i)=>{assert(s.y>positions[i].y+12);assert(s.x>positions[i].x);});
 console.log('PASS: 24/16 and 32/8 mixed fleets, inherited weapons/armor, and downward laser trajectories at screen edges and bottom.');
+
+const fingerprints = new Set();
+for(const level of [1,3,5,7,9,11]) {
+  t.setWave(level);
+  const alien=t.enemies.find(e=>e.type==='scout');
+  for(const action of [t.beginDive,t.fireEnemy]) {
+    action(alien);
+    const kind=playedKinds.at(-1), samples=renderSound(kind);
+    assert(samples.every(Number.isFinite));
+    const rms=Math.sqrt(samples.reduce((sum,n)=>sum+n*n,0)/samples.length);
+    assert(rms>0.02&&rms<0.2,'related voices retain controlled levels');
+    assert(Math.max(...samples)<1&&Math.min(...samples)>-1);
+    assert.equal(samples[0],0);assert(Math.abs(samples.at(-1))<0.001);
+    fingerprints.add(require('crypto').createHash('sha256').update(Buffer.from(samples.buffer)).digest('hex'));
+  }
+}
+assert.equal(fingerprints.size,12,'six variants have distinct dive and weapon samples');
+t.setWave(5);
+const newAlien=t.enemies.find(e=>e.type==='scout');
+const oldAlien=t.enemies.find(e=>e.type==='scout'&&e.variant.name!==newAlien.variant.name);
+t.beginDive(newAlien);const newSound=playedKinds.at(-1);
+t.beginDive(oldAlien);assert.notEqual(playedKinds.at(-1),newSound);
+boss=t.enemies.find(e=>e.type==='boss');t.fireEnemy(boss);
+assert(playedKinds.at(-1).startsWith('enemyshot-boss-'));
+const beforeMute=playedKinds.length;
+handlers['soundButton:click']();t.beginDive(newAlien);t.fireEnemy(newAlien);
+assert.equal(playedKinds.length,beforeMute,'mute prevents all new effect playback');
+handlers['soundButton:click']();
+console.log('PASS: distinct bounded waveforms, per-alien sounds in mixed fleets, boss voice, and mute.');
+
+const introHashes=new Set();
+for(let level=1;level<=7;level++) {
+  t.setWave(level);t.beginLevel();
+  const kind=playedKinds.at(-1);
+  assert.equal(kind,'intro-'+((level-1)%6));
+  const samples=renderSound(kind);
+  assert.equal(samples.length,Math.ceil(4.4*22050));
+  assert(samples.every(Number.isFinite));
+  const rms=Math.sqrt(samples.reduce((sum,n)=>sum+n*n,0)/samples.length);
+  assert(rms>0.02&&rms<0.2);
+  introHashes.add(require('crypto').createHash('sha256').update(Buffer.from(samples.buffer)).digest('hex'));
+  assert.equal(t.state().mode,'intro');assert.equal(t.state().count,0);
+}
+assert.equal(introHashes.size,6,'six distinct dark intros rotate');
+console.log('PASS: six level intro variations, correct rotation, consistent duration and pre-level gameplay delay.');

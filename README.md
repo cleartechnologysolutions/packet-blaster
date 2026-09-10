@@ -46,4 +46,11 @@ even level has 32 current and 8 previous aliens. Only the immediately previous
 group carries forward, in complete squads. Bosses remain additional enemies.
 Enemy laser aiming is limited to 60 degrees from straight down, including outer
 spread shots, so all shots fall with at least half their speed directed downward.
-The header displays `Build 10`.
+Build 11: alien sounds follow each individual alien's role and abilities, even
+in mixed fleets. Twin gunners pulse, zigzag raiders warble, corkscrew aces swoop,
+spread hunters have layered laser tones, and armor/bosses add a deeper register.
+Entrance and dive effects share these signatures; enemy weapon sounds stay
+quieter than dive effects. Player lasers and explosions are unchanged.
+Six dark intro variations rotate each level, changing the motif and key while
+preserving the 4.4-second musical duration and pre-level gameplay delay.
+The header displays `Build 11`.

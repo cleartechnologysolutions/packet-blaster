@@ -114,7 +114,7 @@
     }
     const source = audio.createBufferSource();
     const gain = audio.createGain();
-    gain.gain.value = kind === 'laser' ? 0.45 : 0.8;
+    gain.gain.value = kind === 'laser' ? 0.45 : kind.startsWith('enemyshot-') ? 0.18 : 0.8;
     source.buffer = audioBuffers.get(kind);
     source.connect(gain).connect(audio.destination);
     activeSamples.add(source);
@@ -132,7 +132,7 @@
     fireHeldSeconds = 0;
     ui.waveBanner.textContent = 'STAGE ' + wave + ' · ' + waveProfile(wave).name;
     ui.waveBanner.classList.add('visible');
-    introSource = playSample('intro');
+    introSource = playSample('intro-' + ((wave - 1) % 6));
   }
   let score = 0;
   let highScore = Number(localStorage.getItem("packetBlasterHighScore") || 0);
@@ -400,8 +400,13 @@
     laserShot();
   }
 
+  function enemySound(event, enemy) {
+    const variant = enemy.variant || {};
+    return [event, enemy.type, variant.flight || 'classic', variant.weapon || 'single', variant.armor ? 'armored' : 'light'].join('-');
+  }
+
   function fireEnemy(enemy) {
-    tone(enemy.type === "command" ? 310 : enemy.type === "striker" ? 250 : 190, 0.085, "square", 0.014, -95);
+    playSample(enemySound('enemyshot', enemy));
     if (enemy.type === "boss") {
       [-0.24, 0, 0.24].forEach((angle) => enemyShots.push({ x: enemy.x, y: enemy.y + 25, vx: Math.sin(angle) * 220, vy: Math.cos(angle) * 260, w: 6, h: 14 }));
     } else {
@@ -428,7 +433,7 @@
     enemy.dive = 0;
     enemy.diveStartX = enemy.x;
     enemy.targetX = player.x + (Math.random() - 0.5) * 180;
-    playSample('dive-' + enemy.type);
+    playSample(enemySound('dive', enemy));
   }
 
   function addExplosion(x, y, color, count = 12) {
@@ -660,7 +665,7 @@
         const soundStage = Math.floor(enemy.entranceT * 5);
         if (enemy.soundStage !== soundStage && enemy.entranceSound) {
           enemy.soundStage = soundStage;
-          if (soundStage === 0) playSample('dive-' + enemy.type);
+          if (soundStage === 0) playSample(enemySound('dive', enemy));
         }
         if (progress >= 1) {
           enemy.state = "formation";
