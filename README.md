@@ -15,3 +15,6 @@ npx wrangler deploy
 ```
 
 No database, storage bucket, or API keys are required.
+
+The header displays `Build 5`. If that text is missing after deployment, the
+older deployment is still being served.
