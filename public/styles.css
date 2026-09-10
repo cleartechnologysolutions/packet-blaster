@@ -260,38 +260,9 @@ canvas {
   font-size: 11px;
 }
 
-.mobile-controls {
-  display: none;
-  grid-template-columns: 1fr 1.2fr 1fr;
-  gap: 8px;
-  padding: 10px;
-  border-top: 1px solid #27384d;
-  background: #0b1422;
-}
-
-.mobile-controls button {
-  min-height: 52px;
-  border: 1px solid #36536c;
-  border-radius: 7px;
-  color: #e2e8f0;
-  background: #0b1b2b;
-  font-weight: 900;
-  touch-action: manipulation;
-}
-
-.mobile-controls .fire {
-  border-color: #f472b6;
-  color: #fff1f2;
-  background: #4a1435;
-}
-
 @media (pointer: coarse), (max-width: 720px) {
   .canvas-wrap {
     width: 100%;
-  }
-
-  .mobile-controls {
-    display: grid;
   }
 }
 
